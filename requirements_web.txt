@@ -1,0 +1,7 @@
+flask==2.3.3
+flask-caching
+plotly==5.17.0
+pandas
+numpy
+scikit-learn
+joblib

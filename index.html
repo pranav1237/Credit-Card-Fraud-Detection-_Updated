@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Credit Card Fraud Detection Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body class="bg-gray-100 min-h-screen">
+    <nav class="bg-teal-600 text-white p-4">
+      <div class="container mx-auto flex justify-between items-center">
+        <h1 class="text-xl font-bold">Fraud Detection Dashboard</h1>
+        <div>
+          <span>Welcome, {{ username }}!</span>
+          <a href="{{ url_for('logout') }}" class="ml-4 hover:underline">Logout</a>
+        </div>
+      </div>
+    </nav>
+    <div class="container mx-auto p-4">
+      <h2 class="text-2xl font-bold mb-6">Overview</h2>
+      <div id="stats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- Stats will be loaded via JS -->
+        <div class="bg-white p-6 rounded-lg shadow-md text-center">
+          <h3 class="text-lg font-semibold text-gray-700">Total Transactions</h3>
+          <p class="text-3xl font-bold text-teal-600" id="total">0</p>
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow-md text-center">
+          <h3 class="text-lg font-semibold text-gray-700">Fraud Cases</h3>
+          <p class="text-3xl font-bold text-red-600" id="fraud">0</p>
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow-md text-center">
+          <h3 class="text-lg font-semibold text-gray-700">Fraud Rate</h3>
+          <p class="text-3xl font-bold text-yellow-600" id="rate">0%</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white p-6 rounded-lg shadow-md">
+          <h3 class="text-lg font-bold mb-4">Fraud Distribution</h3>
+          <canvas id="distributionChart" width="400" height="200"></canvas>
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow-md">
+          <h3 class="text-lg font-bold mb-4">Quick Actions</h3>
+          <ul class="space-y-2">
+            <li><a href="{{ url_for('data_page') }}" class="text-teal-500 hover:underline">View Data</a></li>
+            <li><a href="{{ url_for('predict') }}" class="text-teal-500 hover:underline">Make Prediction</a></li>
+            <li><a href="{{ url_for('visualize') }}" class="text-teal-500 hover:underline">Advanced Visualizations</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Fetch stats and update dashboard
+      fetch('/api/stats')
+        .then(response => response.json())
+        .then(data => {
+          if (data.error) {
+            console.error(data.error);
+            return;
+          }
+          document.getElementById('total').textContent = data.total.toLocaleString();
+          document.getElementById('fraud').textContent = data.fraud.toLocaleString();
+          document.getElementById('rate').textContent = data.fraud_percentage.toFixed(2) + '%';
+
+          // Create pie chart
+          const ctx = document.getElementById('distributionChart').getContext('2d');
+          new Chart(ctx, {
+            type: 'pie',
+            data: {
+              labels: ['Non-Fraud', 'Fraud'],
+              datasets: [{
+                data: [data.non_fraud, data.fraud],
+                backgroundColor: ['#10b981', '#ef4444']
+              }]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: {
+                  position: 'bottom'
+                }
+              }
+            }
+          });
+        })
+        .catch(error => console.error('Error fetching stats:', error));
+    </script>
+  </body>
+</html>

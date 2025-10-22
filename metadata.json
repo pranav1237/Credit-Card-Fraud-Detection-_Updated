@@ -1,0 +1,5 @@
+{
+  "name": "Credit Card Fraud Detection ",
+  "description": "An interactive web application to visualize, edit, and analyze credit card transaction data for fraud detection using AI. Features include interactive charts, a data editor, and fraud prediction .",
+  "requestFramePermissions": []
+}

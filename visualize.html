@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visualize - Credit Card Fraud Detection</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      .chart-container {
+        display: none;
+        background: white;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1.5rem;
+      }
+      .loading {
+        display: none;
+        text-align: center;
+        padding: 1rem;
+      }
+      button:hover {
+        transform: translateY(-1px);
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 min-h-screen">
+    <nav class="bg-teal-600 text-white p-4 shadow-lg">
+      <div class="container mx-auto flex justify-between items-center">
+        <h1 class="text-xl font-bold">Fraud Detection Dashboard</h1>
+        <div class="flex items-center space-x-4">
+          <span>Welcome, {{ username }}!</span>
+          <a href="{{ url_for('logout') }}" class="hover:underline">Logout</a>
+        </div>
+      </div>
+    </nav>
+    
+    <div class="container mx-auto p-6 max-w-6xl">
+      <h2 class="text-3xl font-bold mb-6 text-gray-800">Interactive Visualizations</h2>
+      <a href="{{ url_for('index') }}" class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 inline-block mb-4">← Back to Dashboard</a>
+      
+      <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h3 class="text-xl font-semibold mb-4 text-gray-700">Visualization Controls</h3>
+        <p class="text-gray-600 mb-4">Select a view to load and visualize the data. For edited data, first visit the <a href="{{ url_for('data_page') }}" class="text-teal-600 hover:underline">Data</a> page to make changes.</p>
+        <div class="flex flex-wrap gap-4">
+          <button id="loadOriginal" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200">
+            Visualize Original Data
+          </button>
+          <button id="loadEdited" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200">
+            Visualize Edited Data
+          </button>
+          <button id="loadComparison" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200">
+            Show Comparison
+          </button>
+          <button id="loadScatter" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-200">
+            V1 vs V2 Scatter Plot
+          </button>
+        </div>
+      </div>
+
+      <div id="loading" class="loading">
+        <p class="text-teal-600">Loading visualizations...</p>
+      </div>
+
+      <!-- Original/Edited Charts Section -->
+      <div id="mainCharts" class="space-y-6">
+        <div class="chart-container" id="fraudPieContainer">
+          <h3 class="text-lg font-bold mb-4">Fraud Distribution (Pie Chart)</h3>
+          <div class="relative h-64">
+            <canvas id="fraudChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-container" id="fraudBarContainer">
+          <h3 class="text-lg font-bold mb-4">Fraud Distribution (Bar Chart)</h3>
+          <div class="relative h-64">
+            <canvas id="fraudBarChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-container" id="featureMeansContainer">
+          <h3 class="text-lg font-bold mb-4">Feature Means by Class (Bar Chart)</h3>
+          <div class="relative h-80">
+            <canvas id="featureMeansChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-container" id="predictionComparisonContainer" style="display: none;">
+          <h3 class="text-lg font-bold mb-4">Prediction vs Typical Values for Predicted Class</h3>
+          <div class="relative h-80">
+            <canvas id="predictionChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-container" id="scatterContainer">
+          <h3 class="text-lg font-bold mb-4">V1 vs V2 Scatter Plot (Colored by Class)</h3>
+          <div class="relative h-80">
+            <canvas id="scatterChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Comparison Section -->
+      <div id="comparisonCharts" class="space-y-6" style="display: none;">
+        <div class="chart-container">
+          <h3 class="text-lg font-bold mb-4">Fraud Distribution Comparison (Original vs Edited)</h3>
+          <div class="relative h-64">
+            <canvas id="comparisonChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white p-6 rounded-lg shadow-md mt-8">
+        <div class="flex justify-between items-center">
+          <h3 class="text-lg font-bold text-gray-700">Navigation</h3>
+        </div>
+        <div class="flex space-x-4 mt-4">
+          <a href="{{ url_for('index') }}" class="text-teal-600 hover:underline">Dashboard</a>
+          <a href="{{ url_for('data_page') }}" class="text-teal-600 hover:underline">Data</a>
+          <a href="{{ url_for('predict') }}" class="text-teal-600 hover:underline">Predict</a>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let charts = {};
+      let currentMode = 'original'; // 'original', 'edited', 'comparison'
+
+      // Initialize charts (create but hide)
+      function initCharts() {
+        const ctxPie = document.getElementById('fraudChart').getContext('2d');
+        charts.pie = new Chart(ctxPie, {
+          type: 'pie',
+          data: { labels: ['Non-Fraud', 'Fraud'], datasets: [{ data: [0, 0], backgroundColor: ['#10b981', '#ef4444'] }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+
+        const ctxBar = document.getElementById('fraudBarChart').getContext('2d');
+        charts.bar = new Chart(ctxBar, {
+          type: 'bar',
+          data: { labels: ['Non-Fraud', 'Fraud'], datasets: [{ data: [0, 0], backgroundColor: ['#10b981', '#ef4444'] }] },
+          options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        const ctxMeans = document.getElementById('featureMeansChart').getContext('2d');
+        charts.means = new Chart(ctxMeans, {
+          type: 'bar',
+          data: { labels: [], datasets: [{ label: 'Non-Fraud', data: [], backgroundColor: '#10b981' }, { label: 'Fraud', data: [], backgroundColor: '#ef4444' }] },
+          options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        const ctxScatter = document.getElementById('scatterChart').getContext('2d');
+        charts.scatter = new Chart(ctxScatter, {
+          type: 'scatter',
+          data: { datasets: [{ label: 'Non-Fraud', data: [], backgroundColor: '#10b981' }, { label: 'Fraud', data: [], backgroundColor: '#ef4444' }] },
+          options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'V1' } }, y: { title: { display: true, text: 'V2' } } } }
+        });
+
+        const ctxPred = document.getElementById('predictionChart').getContext('2d');
+        charts.prediction = new Chart(ctxPred, {
+          type: 'bar',
+          data: { labels: [], datasets: [{ label: 'Your Prediction', data: [], backgroundColor: '#3b82f6' }, { label: 'Typical for Class', data: [], backgroundColor: '#10b981' }] },
+          options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { title: { display: true, text: '' } } }
+        });
+
+        const ctxComp = document.getElementById('comparisonChart').getContext('2d');
+        charts.comparison = new Chart(ctxComp, {
+          type: 'bar',
+          data: { labels: ['Non-Fraud', 'Fraud'], datasets: [{ label: 'Original', data: [0, 0], backgroundColor: '#10b981' }, { label: 'Edited', data: [0, 0], backgroundColor: '#ef4444' }] },
+          options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+      }
+
+      // Show loading
+      function showLoading(show = true) {
+        document.getElementById('loading').style.display = show ? 'block' : 'none';
+      }
+
+      // Show/hide containers
+      function showCharts(show = true) {
+        document.querySelectorAll('.chart-container').forEach(el => {
+          el.style.display = show ? 'block' : 'none';
+        });
+      }
+
+      // Load original data
+      function loadOriginal() {
+        currentMode = 'original';
+        showLoading();
+        Promise.all([
+          fetch('/api/stats').then(r => r.json()),
+          fetch('/api/feature_means').then(r => r.json())
+        ]).then(([stats, means]) => {
+          if (stats.error) throw new Error(stats.error);
+          if (means.error) throw new Error(means.error);
+
+          const total = stats.total;
+          charts.pie.data.datasets[0].data = [stats.non_fraud, stats.fraud];
+          charts.pie.options.plugins.tooltip.callbacks.label = ctx => {
+            const val = ctx.parsed;
+            return `${ctx.label}: ${val} (${((val / total) * 100).toFixed(1)}%)`;
+          };
+          charts.pie.update();
+
+          charts.bar.data.datasets[0].data = [stats.non_fraud, stats.fraud];
+          charts.bar.update();
+
+          // Feature means
+          const features = ['Time', 'Amount', 'V1', 'V2', 'V3', 'V4', 'V5'];
+          const labels = [];
+          const nonFraudData = [];
+          const fraudData = [];
+          features.forEach(feat => {
+            if (feat in means) {
+              labels.push(feat);
+              nonFraudData.push(means[feat][0]);
+              fraudData.push(means[feat][1]);
+            }
+          });
+          charts.means.data.labels = labels;
+          charts.means.data.datasets[0].data = nonFraudData;
+          charts.means.data.datasets[1].data = fraudData;
+          charts.means.update();
+
+          // Hide scatter for now, or load separately
+          showCharts();
+          document.getElementById('predictionComparisonContainer').style.display = 'none';
+          document.getElementById('scatterContainer').style.display = 'none';
+          document.getElementById('comparisonCharts').style.display = 'none';
+          showLoading(false);
+        }).catch(err => {
+          alert('Error loading original data: ' + err.message);
+          showLoading(false);
+        });
+      }
+
+      // Load edited data
+      function loadEdited() {
+        currentMode = 'edited';
+        showLoading();
+        Promise.all([
+          fetch('/api/edited_stats').then(r => r.json()),
+          fetch('/api/edited_feature_means').then(r => r.json())
+        ]).then(([stats, means]) => {
+          if (stats.error) throw new Error(stats.error);
+          if (means.error) throw new Error(means.error);
+
+          const total = stats.total;
+          charts.pie.data.datasets[0].data = [stats.non_fraud, stats.fraud];
+          charts.pie.options.plugins.tooltip.callbacks.label = ctx => {
+            const val = ctx.parsed;
+            return `${ctx.label}: ${val} (${((val / total) * 100).toFixed(1)}%)`;
+          };
+          charts.pie.update();
+
+          charts.bar.data.datasets[0].data = [stats.non_fraud, stats.fraud];
+          charts.bar.update();
+
+          // Feature means (similar to original)
+          const features = ['Time', 'Amount', 'V1', 'V2', 'V3', 'V4', 'V5'];
+          const labels = [];
+          const nonFraudData = [];
+          const fraudData = [];
+          features.forEach(feat => {
+            if (feat in means) {
+              labels.push(feat);
+              nonFraudData.push(means[feat][0]);
+              fraudData.push(means[feat][1]);
+            }
+          });
+          charts.means.data.labels = labels;
+          charts.means.data.datasets[0].data = nonFraudData;
+          charts.means.data.datasets[1].data = fraudData;
+          charts.means.update();
+
+          showCharts();
+          document.getElementById('predictionComparisonContainer').style.display = 'none';
+          document.getElementById('scatterContainer').style.display = 'none';
+          document.getElementById('comparisonCharts').style.display = 'none';
+          showLoading(false);
+        }).catch(err => {
+          alert('Error loading edited data: ' + err.message + '. No edits made?');
+          showLoading(false);
+        });
+      }
+
+      // Load comparison
+      function loadComparison() {
+        showLoading();
+        fetch('/api/comparison_stats').then(r => r.json()).then(data => {
+          if (data.error) throw new Error(data.error);
+
+          charts.comparison.data.datasets[0].data = [data.original.non_fraud, data.original.fraud];
+          charts.comparison.data.datasets[1].data = [data.edited.non_fraud, data.edited.fraud];
+          charts.comparison.update();
+
+          showCharts(false); // Hide main
+          document.getElementById('comparisonCharts').style.display = 'block';
+          document.querySelector('#comparisonCharts .chart-container').style.display = 'block';
+          document.getElementById('scatterContainer').style.display = 'none';
+          showLoading(false);
+        }).catch(err => {
+          alert('Error loading comparison: ' + err.message);
+          showLoading(false);
+        });
+      }
+
+      // Load scatter
+      function loadScatter() {
+        showLoading();
+        const api = currentMode === 'edited' ? '/api/edited_scatter_data' : '/api/scatter_data';
+        fetch(api).then(r => r.json()).then(data => {
+          if (data.error) throw new Error(data.error);
+
+          // Reset datasets
+          charts.scatter.data.datasets[0].data = [];
+          charts.scatter.data.datasets[1].data = [];
+          data.V1.forEach((v1, i) => {
+            const point = { x: v1, y: data.V2[i] };
+            if (data.Class[i] === 0) {
+              charts.scatter.data.datasets[0].data.push(point);
+            } else {
+              charts.scatter.data.datasets[1].data.push(point);
+            }
+          });
+          charts.scatter.update();
+
+          showCharts(false);
+          document.getElementById('scatterContainer').style.display = 'block';
+          document.getElementById('comparisonCharts').style.display = 'none';
+          showLoading(false);
+        }).catch(err => {
+          alert('Error loading scatter: ' + err.message);
+          showLoading(false);
+        });
+      }
+
+      // Load prediction comparison
+      function loadPredictionComparison() {
+        showLoading();
+        fetch('/api/prediction_comparison').then(r => r.json()).then(data => {
+          if (data.error) {
+            // No prediction, fallback to original
+            loadOriginal();
+            return;
+          }
+
+          // Update prediction chart
+          const labels = [];
+          const predData = [];
+          const meanData = [];
+          Object.keys(data).forEach(key => {
+            if (typeof data[key] === 'object' && 'prediction' in data[key]) {
+              labels.push(key);
+              predData.push(data[key].prediction);
+              meanData.push(data[key].class_mean);
+            }
+          });
+          charts.prediction.data.labels = labels;
+          charts.prediction.data.datasets[0].data = predData;
+          charts.prediction.data.datasets[1].data = meanData;
+          charts.prediction.options.plugins.title.text = `${data.summary.label} (${(data.summary.probability * 100 || 0).toFixed(2)}% confidence)`;
+          charts.prediction.update();
+
+          // Show prediction container, hide others
+          showCharts(false);
+          document.getElementById('predictionComparisonContainer').style.display = 'block';
+          document.getElementById('scatterContainer').style.display = 'none';
+          document.getElementById('comparisonCharts').style.display = 'none';
+          showLoading(false);
+        }).catch(err => {
+          console.error('Error loading prediction comparison:', err);
+          loadOriginal(); // Fallback
+        });
+      }
+
+      // Event listeners
+      document.addEventListener('DOMContentLoaded', () => {
+        initCharts();
+        // Try prediction comparison first, fallback to original
+        loadPredictionComparison();
+      });
+
+      document.getElementById('loadOriginal').addEventListener('click', loadOriginal);
+      document.getElementById('loadEdited').addEventListener('click', loadEdited);
+      document.getElementById('loadComparison').addEventListener('click', loadComparison);
+      document.getElementById('loadScatter').addEventListener('click', loadScatter);
+    </script>
+  </body>
+</html>
